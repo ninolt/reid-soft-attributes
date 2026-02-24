@@ -1,0 +1,194 @@
+# ============================================================
+# Global configuration for reid-soft-attributes
+# All magic values from the codebase are centralised here.
+# ============================================================
+
+# ----------------------------------------------------------
+# Dataset
+# ----------------------------------------------------------
+dataset:
+  name: "market1501_attr"
+  data_dir: "datasets/Market-1501-v15.09.15"
+  height: 384
+  width: 128
+  batch_size_train: 32
+  batch_size_test: 64
+  train_sampler: "RandomIdentitySampler"
+  pin_memory: true
+  transforms:
+    - "random_flip"
+    - "random_crop"
+    - "random_erase"
+    - "color_jitter"
+  market_attr_url: "https://raw.githubusercontent.com/vana77/Market-1501_Attribute/9832cddc0903c2cf02d8eb23b509be06d8a73237/market_attribute.mat"
+  gallery_attr_url: "https://raw.githubusercontent.com/vana77/Market-1501_Attribute/9832cddc0903c2cf02d8eb23b509be06d8a73237/gallery_market.mat"
+  download_chunk_size: 8192
+  # Age max number of classes (used in _cls helper)
+  age_num_classes: 4
+
+# ----------------------------------------------------------
+# IQA (Image Quality Assessment)
+# ----------------------------------------------------------
+iqa:
+  backbone: "resnet50"
+  # Number of identities in the Market-1501 training set used to init backbone
+  num_classes: 751
+  cache_path: "iqa_cache.npy"
+  # Print progress every N images
+  progress_log_interval: 500
+  perturbations:
+    # V-channel shifts in HSV (lighting simulation)
+    lightning_shifts: [-90, -45, 45, 90]
+    # Gaussian blur radii
+    blur_sigmas: [1, 1.5, 1.85]
+    # Fractional padding around occluding rectangles
+    occlusion_pad_factor: 0.05
+    # Fraction of image size covered per occlusion patch
+    occlusion_percentages: [0.05, 0.10, 0.15, 0.20]
+    # RGB background colours for composite perturbations
+    background_colors:
+      - [255, 0, 0]
+      - [0, 0, 255]
+      - [255, 255, 0]
+      - [0, 255, 0]
+    # Ellipse scale factors for background mask
+    background_scales: [1.2, 1.0]
+    # Standard deviation for Gaussian noise
+    noise_gaussian_scale: 25
+    # Fraction of pixels affected by salt-and-pepper noise
+    noise_salt_pepper_amount: 0.02
+    # Multiplicative scale for speckle noise
+    noise_speckle_scale: 0.1
+
+# ----------------------------------------------------------
+# Model architecture — GlobalReIDNetwork
+# ----------------------------------------------------------
+model:
+  num_parts: 6
+  fusion_dim: 1024
+  # Backbone output channels fed into each branch
+  apan_in_channels: 2048  # ResNet layer4
+  # IQA normalisation statistics (precomputed on Market-1501 training set)
+  iqa_mean: 11.109615
+  iqa_std: 0.658360
+  # Epsilon added to std to avoid division by zero
+  iqa_std_epsilon: 1.0e-8
+  dropout_rate: 0.0
+  # Alpha value used when no IQA score is provided (neutral fusion)
+  default_iqa_alpha: 0.5
+  # Hidden units in the alpha MLP head
+  alpha_head_hidden: 32
+  # Normal initialisation std for classifier weight matrix
+  classifier_weight_std: 0.001
+
+# ----------------------------------------------------------
+# APAN (Attribute Pyramid Attention Network)
+# ----------------------------------------------------------
+apan:
+  lstm_hidden: 256
+  lstm_kernel_size: 3
+  feature_dim: 1024
+  binary_keys:
+    - "gender"
+    - "hair"
+    - "sleeve"
+    - "down_length"
+    - "lower_type"
+    - "hat"
+    - "backpack"
+    - "bag"
+    - "handbag"
+  multi_keys:
+    age: 4
+    upper_color: 8
+    lower_color: 9
+
+# ----------------------------------------------------------
+# APN (Appearance Pyramid Network)
+# ----------------------------------------------------------
+apn:
+  in_channels: 1024
+  feature_dim: 1024
+  ltn_mid_channels: 128
+  ltn_out_channels: 512
+
+# ----------------------------------------------------------
+# MFPM (Multi-Feature Pyramid Module)
+# ----------------------------------------------------------
+mfpm:
+  decoder_channels: [512, 512, 256, 128, 64, 1]
+  dilation_rates: [2, 3, 4]
+
+# ----------------------------------------------------------
+# LTN / LAM (Local Attention Network)
+# ----------------------------------------------------------
+ltn:
+  channel_attention_reduction: 16
+  spatial_attention_kernel_size: 7
+  # Number of spatial parts in the 2×2 grid split
+  num_local_parts: 4
+
+# ----------------------------------------------------------
+# PAFM (Pyramid Attention Feature Module)
+# ----------------------------------------------------------
+pafm:
+  proj_channels: 256
+  pyramid_kernel_sizes: [3, 5, 7]
+  post_conv_kernel_size: 7
+
+# ----------------------------------------------------------
+# Training
+# ----------------------------------------------------------
+training:
+  epochs: 120
+  lr: 0.00035
+  weight_decay: 5.0e-4
+  log_interval: 50
+  eval_interval: 10
+  save_dir: "checkpoints"
+  save_every: 10
+  warmup_epochs: 10
+  triplet_margin: 0.3
+  triplet_weight: 1.0
+  label_smoothing: 0.1
+  center_loss_weight: 0.0005
+  freeze_epochs: 10
+  branch_lr_scale: 0.1
+  apn_checkpoint_path: "checkpoints/apn_branch_final.pth"
+  apan_checkpoint_path: "checkpoints/apan_branch_final.pth"
+
+# ----------------------------------------------------------
+# Evaluation
+# ----------------------------------------------------------
+evaluation:
+  max_rank: 10
+  default_iqa_score: 0.7
+
+# ----------------------------------------------------------
+# Logging / paths
+# ----------------------------------------------------------
+logging:
+  metrics_dir: "runs/metrics"
+
+# ----------------------------------------------------------
+# Checkpoints
+# ----------------------------------------------------------
+checkpoints:
+  best: "checkpoints/full_model_best.pth"
+  latest: "checkpoints/full_model_epoch_latest.pth"
+
+# ----------------------------------------------------------
+# Visualization (experiments/)
+# ----------------------------------------------------------
+visualization:
+  dpi: 300
+  n_examples: 5
+  n_heatmaps: 3
+  n_cols: 5
+  # IQA colour thresholds for sample image plots
+  iqa_high_threshold: 11.5
+  iqa_low_threshold: 10.5
+  # Blending weight when overlaying heatmaps over the original image
+  overlay_alpha: 0.5
+  output_dir: "experiments/visualizations"
+  ablation_output_dir: "experiments/results"
